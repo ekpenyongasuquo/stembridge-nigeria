@@ -1,0 +1,11 @@
+(
+echo .env
+echo data/chroma_db/
+echo data/knowledge_base.json
+echo __pycache__/
+echo *.pyc
+echo .streamlit/secrets.toml
+echo venv/
+echo *.egg-info/
+echo .DS_Store
+) > .gitignore
