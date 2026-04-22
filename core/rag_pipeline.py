@@ -1,98 +1,94 @@
 """
-RAG Pipeline — FAISS vector store over WAEC knowledge base
+RAG Pipeline — Lightweight keyword retrieval over WAEC knowledge base
+No heavy ML models. Works within Render free tier (512MB RAM).
+Uses TF-IDF style scoring for relevant question retrieval.
 """
 import json
 import os
-import numpy as np
-import faiss
-from sentence_transformers import SentenceTransformer
+import re
+from collections import defaultdict
 
-_model = None
-_index = None
-_metadata = []
+_knowledge_base = {}  # {subject: [{"question":..,"answer":..,"topic":..,"year":..}]}
 
-def _get_model():
-    global _model
-    if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _model
 
 def build_vector_store(knowledge_base: dict) -> bool:
-    global _index, _metadata
-    model = _get_model()
-    documents = []
-    _metadata = []
-
-    for subject, questions in knowledge_base.items():
-        for q in questions:
-            doc = f"Question: {q['question']}\nAnswer: {q['answer']}"
-            documents.append(doc)
-            _metadata.append({
-                "subject": subject,
-                "topic": q.get("topic", subject),
-                "year": q.get("year", "N/A"),
-                "question": q["question"],
-                "answer": q["answer"],
-            })
-
-    if not documents:
-        return False
-
-    embeddings = model.encode(documents, show_progress_bar=False)
-    embeddings = np.array(embeddings).astype("float32")
-    faiss.normalize_L2(embeddings)
-
-    _index = faiss.IndexFlatIP(embeddings.shape[1])
-    _index.add(embeddings)
-
-    os.makedirs("data", exist_ok=True)
-    faiss.write_index(_index, "data/faiss.index")
-    with open("data/metadata.json", "w") as f:
-        json.dump(_metadata, f)
-
+    """Load knowledge base into memory"""
+    global _knowledge_base
+    _knowledge_base = knowledge_base
     return True
 
+
 def load_collections() -> bool:
-    global _index, _metadata
-    if os.path.exists("data/faiss.index") and os.path.exists("data/metadata.json"):
-        _index = faiss.read_index("data/faiss.index")
-        with open("data/metadata.json") as f:
-            _metadata = json.load(f)
+    """Load from saved JSON"""
+    global _knowledge_base
+    kb_path = "data/knowledge_base.json"
+    if os.path.exists(kb_path):
+        with open(kb_path) as f:
+            _knowledge_base = json.load(f)
         return True
     return False
 
+
+def _score(query: str, question: dict) -> float:
+    """Score a question's relevance to a query using keyword overlap"""
+    query_words = set(re.findall(r'\w+', query.lower()))
+    # Remove common stop words
+    stops = {"what","is","the","a","an","of","in","how","do","does","find",
+             "calculate","state","define","give","name","explain","difference",
+             "between","and","or","to","for","with","can","i","me","my","why"}
+    query_words -= stops
+
+    q_text = (question.get("question","") + " " +
+              question.get("answer","") + " " +
+              question.get("topic","")).lower()
+    q_words = set(re.findall(r'\w+', q_text))
+
+    if not query_words:
+        return 0.0
+
+    overlap = query_words & q_words
+    score = len(overlap) / len(query_words)
+
+    # Boost if topic words match
+    topic_words = set(re.findall(r'\w+', question.get("topic","").lower()))
+    if query_words & topic_words:
+        score += 0.3
+
+    return score
+
+
 def retrieve(query: str, subject: str, n_results: int = 4) -> list:
-    global _index, _metadata
-    if _index is None or not _metadata:
+    """Retrieve top-k relevant WAEC questions for a query"""
+    subject_key = subject.lower()
+    questions = _knowledge_base.get(subject_key, [])
+
+    if not questions:
         return []
 
-    model = _get_model()
-    query_vec = model.encode([query], show_progress_bar=False)
-    query_vec = np.array(query_vec).astype("float32")
-    faiss.normalize_L2(query_vec)
-
-    n = min(n_results * 3, _index.ntotal)
-    _, indices = _index.search(query_vec, n)
+    # Score all questions
+    scored = [(q, _score(query, q)) for q in questions]
+    scored.sort(key=lambda x: x[1], reverse=True)
 
     results = []
-    for idx in indices[0]:
-        if idx < 0 or idx >= len(_metadata):
-            continue
-        meta = _metadata[idx]
-        if meta["subject"].lower() == subject.lower():
+    for q, score in scored[:n_results]:
+        if score > 0:
             results.append(
-                f"[{meta['topic']} - WAEC {meta['year']}]\n"
-                f"Q: {meta['question']}\nA: {meta['answer']}"
+                f"[{q.get('topic', subject)} - WAEC {q.get('year', '')}]\n"
+                f"Q: {q.get('question', '')}\n"
+                f"A: {q.get('answer', '')}"
             )
-        if len(results) >= n_results:
-            break
 
     return results
 
+
 def is_ready() -> bool:
-    return _index is not None and len(_metadata) > 0
+    return len(_knowledge_base) > 0
+
 
 def init_rag() -> bool:
+    """Initialize RAG pipeline"""
+    if is_ready():
+        return True
     if load_collections():
         return True
     kb_path = "data/knowledge_base.json"
