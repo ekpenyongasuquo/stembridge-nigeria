@@ -1,126 +1,103 @@
 """
-RAG Pipeline — ChromaDB vector store over WAEC knowledge base
-Loads questions from data/knowledge_base.json and enables semantic retrieval
+RAG Pipeline — FAISS vector store over WAEC knowledge base
 """
 import json
 import os
-import chromadb
-from chromadb.utils import embedding_functions
+import numpy as np
+import faiss
+from sentence_transformers import SentenceTransformer
 
-_client = None
-_collections = {}
+_model = None
+_index = None
+_metadata = []
 
-
-def _get_client():
-    global _client
-    if _client is None:
-        _client = chromadb.PersistentClient(path="data/chroma_db")
-    return _client
-
-
-def _get_embedding_fn():
-    return embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"
-    )
-
+def _get_model():
+    global _model
+    if _model is None:
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
 
 def build_vector_store(knowledge_base: dict) -> bool:
-    """Index all WAEC questions into ChromaDB"""
-    client = _get_client()
-    ef = _get_embedding_fn()
+    global _index, _metadata
+    model = _get_model()
+    documents = []
+    _metadata = []
 
     for subject, questions in knowledge_base.items():
-        collection_name = f"waec_{subject.lower()}"
-
-        # Drop and recreate for fresh indexing
-        try:
-            client.delete_collection(collection_name)
-        except Exception:
-            pass
-
-        collection = client.create_collection(
-            name=collection_name,
-            embedding_function=ef,
-            metadata={"subject": subject}
-        )
-
-        documents, metadatas, ids = [], [], []
-        for i, q in enumerate(questions):
+        for q in questions:
             doc = f"Question: {q['question']}\nAnswer: {q['answer']}"
             documents.append(doc)
-            metadatas.append({
+            _metadata.append({
+                "subject": subject,
                 "topic": q.get("topic", subject),
                 "year": q.get("year", "N/A"),
-                "subject": subject,
                 "question": q["question"],
                 "answer": q["answer"],
             })
-            ids.append(f"{subject}_{i}")
 
-        if documents:
-            collection.add(documents=documents, metadatas=metadatas, ids=ids)
-            _collections[subject.lower()] = collection
+    if not documents:
+        return False
+
+    embeddings = model.encode(documents, show_progress_bar=False)
+    embeddings = np.array(embeddings).astype("float32")
+    faiss.normalize_L2(embeddings)
+
+    _index = faiss.IndexFlatIP(embeddings.shape[1])
+    _index.add(embeddings)
+
+    os.makedirs("data", exist_ok=True)
+    faiss.write_index(_index, "data/faiss.index")
+    with open("data/metadata.json", "w") as f:
+        json.dump(_metadata, f)
 
     return True
 
-
-def load_collections():
-    """Load existing ChromaDB collections"""
-    client = _get_client()
-    ef = _get_embedding_fn()
-    subjects = ["mathematics", "physics", "chemistry", "biology"]
-
-    for subject in subjects:
-        collection_name = f"waec_{subject}"
-        try:
-            col = client.get_collection(name=collection_name, embedding_function=ef)
-            _collections[subject] = col
-        except Exception:
-            pass
-
-    return len(_collections) > 0
-
+def load_collections() -> bool:
+    global _index, _metadata
+    if os.path.exists("data/faiss.index") and os.path.exists("data/metadata.json"):
+        _index = faiss.read_index("data/faiss.index")
+        with open("data/metadata.json") as f:
+            _metadata = json.load(f)
+        return True
+    return False
 
 def retrieve(query: str, subject: str, n_results: int = 4) -> list:
-    """Retrieve relevant Q&A pairs for a query"""
-    subject_key = subject.lower()
-    if subject_key not in _collections:
+    global _index, _metadata
+    if _index is None or not _metadata:
         return []
 
-    collection = _collections[subject_key]
-    try:
-        results = collection.query(
-            query_texts=[query],
-            n_results=min(n_results, collection.count())
-        )
-        context_items = []
-        if results and results["metadatas"]:
-            for meta in results["metadatas"][0]:
-                context_items.append(
-                    f"[{meta.get('topic', subject)} - WAEC {meta.get('year', '')}]\n"
-                    f"Q: {meta.get('question', '')}\n"
-                    f"A: {meta.get('answer', '')}"
-                )
-        return context_items
-    except Exception:
-        return []
+    model = _get_model()
+    query_vec = model.encode([query], show_progress_bar=False)
+    query_vec = np.array(query_vec).astype("float32")
+    faiss.normalize_L2(query_vec)
 
+    n = min(n_results * 3, _index.ntotal)
+    _, indices = _index.search(query_vec, n)
+
+    results = []
+    for idx in indices[0]:
+        if idx < 0 or idx >= len(_metadata):
+            continue
+        meta = _metadata[idx]
+        if meta["subject"].lower() == subject.lower():
+            results.append(
+                f"[{meta['topic']} - WAEC {meta['year']}]\n"
+                f"Q: {meta['question']}\nA: {meta['answer']}"
+            )
+        if len(results) >= n_results:
+            break
+
+    return results
 
 def is_ready() -> bool:
-    return len(_collections) > 0
-
+    return _index is not None and len(_metadata) > 0
 
 def init_rag() -> bool:
-    """Initialize RAG — load existing or build from knowledge base"""
-    # Try loading existing
     if load_collections():
         return True
-
-    # Build from knowledge base JSON
     kb_path = "data/knowledge_base.json"
     if os.path.exists(kb_path):
         with open(kb_path) as f:
             kb = json.load(f)
         return build_vector_store(kb)
-
     return False

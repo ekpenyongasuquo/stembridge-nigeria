@@ -1,11 +1,7 @@
-(
-echo .env
-echo data/chroma_db/
-echo data/knowledge_base.json
-echo __pycache__/
-echo *.pyc
-echo .streamlit/secrets.toml
-echo venv/
-echo *.egg-info/
-echo .DS_Store
-) > .gitignore
+.env 
+data/chroma_db/ 
+data/knowledge_base.json 
+__pycache__/ 
+*.pyc 
+venv/ 
+.DS_Store 
