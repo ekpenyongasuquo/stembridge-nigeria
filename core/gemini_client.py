@@ -1,53 +1,59 @@
-"""Gemini 2.0 Flash API client for STEMBridge"""
+"""OpenAI GPT-4o-mini client for STEMBridge"""
 import os
-import google.generativeai as genai
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
 
-_model = None
+_client = None
 
 
-def get_model():
-    global _model
-    if _model is None:
-        api_key = os.getenv("GEMINI_API_KEY")
+def get_client():
+    global _client
+    if _client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY not found in environment variables")
-        genai.configure(api_key=api_key)
-        _model = genai.GenerativeModel("gemini-2.0-flash")
-    return _model
+            raise ValueError("OPENAI_API_KEY not found in environment variables")
+        _client = OpenAI(api_key=api_key)
+    return _client
 
 
 def generate(prompt: str, system: str = None, temperature: float = 0.7) -> str:
     """Single-turn generation"""
-    model = get_model()
-    config = genai.GenerationConfig(temperature=temperature, max_output_tokens=1500)
-
+    client = get_client()
+    messages = []
     if system:
-        full_prompt = f"{system}\n\n{prompt}"
-    else:
-        full_prompt = prompt
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
 
-    response = model.generate_content(full_prompt, generation_config=config)
-    return response.text
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        temperature=temperature,
+        max_tokens=1500,
+    )
+    return response.choices[0].message.content
 
 
 def chat_generate(history: list, new_message: str, system: str = None) -> str:
     """Multi-turn chat generation"""
-    model = get_model()
-    config = genai.GenerationConfig(temperature=0.7, max_output_tokens=1500)
+    client = get_client()
+    messages = []
 
-    # Build full prompt from history
-    conversation = ""
     if system:
-        conversation += f"[System Instructions]\n{system}\n\n"
+        messages.append({"role": "system", "content": system})
 
-    for msg in history[-10:]:  # Keep last 10 turns for context
-        role = "Student" if msg["role"] == "user" else "STEMBridge Tutor"
-        conversation += f"{role}: {msg['content']}\n\n"
+    # Keep last 10 turns for context
+    for msg in history[-10:]:
+        role = "user" if msg["role"] == "user" else "assistant"
+        messages.append({"role": role, "content": msg["content"]})
 
-    conversation += f"Student: {new_message}\n\nSTEMBridge Tutor:"
+    messages.append({"role": "user", "content": new_message})
 
-    response = model.generate_content(conversation, generation_config=config)
-    return response.text
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        temperature=0.7,
+        max_tokens=1500,
+    )
+    return response.choices[0].message.content
