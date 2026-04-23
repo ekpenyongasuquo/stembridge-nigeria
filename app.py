@@ -209,18 +209,7 @@ with st.sidebar:
             st.markdown(f"**{subject_icons[subj]} {subj}**: {acc}% accuracy")
             st.progress(acc / 100)
 
-    st.divider()
 
-    # API Key input
-    st.markdown("**🔑 API Setup**")
-    api_key = st.text_input("Gemini API Key", type="password",
-                             value=os.getenv("GEMINI_API_KEY", ""),
-                             help="Get free key at aistudio.google.com")
-    if api_key:
-        os.environ["GEMINI_API_KEY"] = api_key
-        # Reset model so it picks up new key
-        import core.gemini_client as gc
-        gc._model = None
 
 
 # ── RAG Initialization ───────────────────────────────────────────────────────
