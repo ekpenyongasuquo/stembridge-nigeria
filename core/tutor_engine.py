@@ -64,8 +64,7 @@ def tutor_respond(user_message: str, subject: str, history: list) -> str:
         response = chat_generate(history, user_message, system=system)
         return response
     except Exception as e:
-        return f"⚠️ Connection issue: {str(e)}. Please check your GEMINI_API_KEY."
-
+        return f"⚠️ Connection issue: {str(e)}. Please check your OPENAI_API_KEY."
 
 def detect_misconception(student_answer: str, correct_answer: str, subject: str) -> str:
     """Analyze a student's wrong answer to find the specific misconception"""
