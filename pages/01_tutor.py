@@ -2,6 +2,10 @@
 STEMBridge — AI Tutor Chat Page
 """
 import re
+import streamlit as st
+from utils.session_state import init_session, add_message, update_progress
+from core.tutor_engine import tutor_respond, WAEC_TOPICS
+from core import rag_pipeline
 
 def clean_latex(text: str) -> str:
     """Remove LaTeX notation and replace with clean readable text"""
