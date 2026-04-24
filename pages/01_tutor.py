@@ -1,10 +1,50 @@
 """
 STEMBridge — AI Tutor Chat Page
 """
-import streamlit as st
-from utils.session_state import init_session, add_message, update_progress
-from core.tutor_engine import tutor_respond, WAEC_TOPICS
-from core import rag_pipeline
+import re
+
+def clean_latex(text: str) -> str:
+    """Remove LaTeX notation and replace with clean readable text"""
+    # Remove [ ] wrapping around formulas
+    text = re.sub(r'\\\[|\\\]', '', text)
+    text = re.sub(r'\$\$.*?\$\$', '', text, flags=re.DOTALL)
+    text = re.sub(r'\$.*?\$', '', text)
+    # Replace LaTeX symbols with Unicode
+    text = text.replace(r'\Delta', 'Δ')
+    text = text.replace(r'\delta', 'δ')
+    text = text.replace(r'\alpha', 'α')
+    text = text.replace(r'\beta', 'β')
+    text = text.replace(r'\gamma', 'γ')
+    text = text.replace(r'\lambda', 'λ')
+    text = text.replace(r'\mu', 'μ')
+    text = text.replace(r'\pi', 'π')
+    text = text.replace(r'\theta', 'θ')
+    text = text.replace(r'\omega', 'ω')
+    text = text.replace(r'\times', '×')
+    text = text.replace(r'\div', '÷')
+    text = text.replace(r'\approx', '≈')
+    text = text.replace(r'\neq', '≠')
+    text = text.replace(r'\geq', '≥')
+    text = text.replace(r'\leq', '≤')
+    text = text.replace(r'\infty', '∞')
+    text = text.replace(r'\cdot', '·')
+    text = text.replace(r'\pm', '±')
+    # Replace \frac{a}{b} with a/b
+    text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1/\2', text)
+    # Replace ^{2} with ²
+    text = re.sub(r'\^\{2\}', '²', text)
+    text = re.sub(r'\^\{3\}', '³', text)
+    text = re.sub(r'\^2\b', '²', text)
+    text = re.sub(r'\^3\b', '³', text)
+    # Remove remaining { } braces from LaTeX
+    text = re.sub(r'\\[a-zA-Z]+\{([^}]*)\}', r'\1', text)
+    text = text.replace('{', '').replace('}', '')
+    # Remove remaining backslashes
+    text = re.sub(r'\\(?=[a-zA-Z])', '', text)
+    # Clean up extra whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
 
 st.set_page_config(page_title="STEMBridge — Tutor", page_icon="💬", layout="wide")
 
@@ -147,6 +187,7 @@ for i, topic in enumerate(topics):
             add_message("user", starter)
             with st.spinner("STEMBridge is thinking..."):
                 reply = tutor_respond(starter, subject, st.session_state.messages[:-1])
+                reply = clean_latex(reply)
             add_message("assistant", reply)
             st.rerun()
 
@@ -177,7 +218,8 @@ else:
         if msg["role"] == "user":
             chat_html += f'<div class="msg-user"><div class="bubble-user">{msg["content"]}</div></div>'
         else:
-            content = msg["content"].replace("<", "&lt;").replace(">", "&gt;")
+            raw = clean_latex(msg["content"])
+            content = raw.replace("<", "&lt;").replace(">", "&gt;")
             chat_html += f'''
             <div class="msg-ai">
                 <div class="ai-avatar">🌉</div>
@@ -204,6 +246,7 @@ if user_input:
 
     with st.spinner(f"STEMBridge is thinking about your {subject} question..."):
         reply = tutor_respond(user_input, subject, st.session_state.messages[:-1])
+        reply = clean_latex(reply)
 
     add_message("assistant", reply)
     update_progress(subject, correct=True)  # Count participation

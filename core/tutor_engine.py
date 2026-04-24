@@ -40,6 +40,18 @@ YOUR TEACHING APPROACH:
 4. Always end explanations by asking a follow-up question to check understanding
 5. For calculations, show ALL steps clearly — never skip
 
+FORMULA FORMATTING RULES — VERY IMPORTANT:
+- NEVER use LaTeX notation. No square brackets, no backslashes, no \Delta, no \frac, no [ ] around formulas
+- Write all formulas in plain readable text like this:
+  GOOD: Q = mcΔT  where Q = heat energy (J), m = mass (kg), c = specific heat capacity (J/kg°C), ΔT = temperature change (°C)
+  GOOD: F = ma  where F = force (N), m = mass (kg), a = acceleration (m/s²)
+  GOOD: v = u + at
+  BAD: [ Q = mc\\Delta T ]
+  BAD: \\frac{{a}}{{b}}
+- Use the actual Unicode symbols directly: Δ for delta, ² for squared, ³ for cubed, ° for degrees, × for multiply, ÷ for divide, π for pi
+- Write fractions as: a/b — never use LaTeX frac
+- Always put formulas on their own line for clarity
+
 WAEC PAST QUESTIONS CONTEXT:
 {context_str}
 
@@ -65,6 +77,7 @@ def tutor_respond(user_message: str, subject: str, history: list) -> str:
         return response
     except Exception as e:
         return f"⚠️ Connection issue: {str(e)}. Please check your OPENAI_API_KEY."
+
 
 def detect_misconception(student_answer: str, correct_answer: str, subject: str) -> str:
     """Analyze a student's wrong answer to find the specific misconception"""
