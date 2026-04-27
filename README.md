@@ -4,8 +4,7 @@
 > Built for DSH Hacks V1 | Theme: AI × STEM Education
 > 
 [(https://emfon-stembridge-nigeria.hf.space)]
-
-![Live Demo](https://img.shields.io/badge/Live%20Demo-Render.com-00A86B?style=for-the-badge)]
+![Live Demo](https://img.shields.io/badge/Live%20Demo-Render.com-00A86B?style=for-the-badge)
 [![Python](https://img.shields.io/badge/Python-3.11-blue?style=for-the-badge)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35-red?style=for-the-badge)](https://streamlit.io)
 [![Gemini](https://img.shields.io/badge/Gemini-2.0%20Flash-orange?style=for-the-badge)](https://aistudio.google.com)
